@@ -1,0 +1,100 @@
+This article shows you how to use a free PowerShell script to block bad domain names by modifying the HOSTS file on Windows computers. You can run the script manually, as a scheduled job, or push it out through Group Policy for enterprise-wide deployment. This is a script we use in the Securing Windows and PowerShell Automation course (SEC505) at SANS conferences.
+
+Download the Update-HostsFile.ps1 script from BlueTeamPowerShell.com in the SEC505 zip file (look under \Day4\DNS).
+
+Note: Why is this script any different than other HOSTS file tools out there? The script puts nine names on each line of the file, which optimizes lookup performance greatly. The script can take multiple local, SMB or HTTP paths to multiple input files to create one new HOSTS file with redundant names removed. It can create duplicate names with "www." prepended if necessary. And because it's a public domain PowerShell script instead of a licensed binary, it's easy to customize without any legal worries.
+
+Background
+A well-known trick to block the domain names used by malware, spyware and advertising sites is to add these names to one's HOSTS file using an invalid IP address such as "0.0.0.0". When the malware on an infected computer, for example, attempts to resolve a fully-qualified domain name (FQDN), perhaps to download the next stage malicious binary, if this FQDN is in the HOSTS file, the malware should fail to resolve the correct IP address. To blackhole unwanted domain names like this, you can modify a computer's HOSTS file or modify the DNS server used by that computer.
+
+Note: Here is a PowerShell script to manage Windows DNS Server blackhole domains too.
+
+Modifying HOSTS files has a few advantages: 1) if a roaming laptop switches to a different DNS server, its HOSTS file is still used; 2) you do not need administrative rights on any DNS servers to modify your HOSTS file, you only have to be a member of the local Administrators group on your own computer; 3) in an Active Directory environment, users are (hopefully) not members of their local Administrators groups, so updates to the HOSTS file will be accomplished through Group Policy, scheduled jobs, remote command execution, or an EMS product; 4) malware will often modify the HOSTS file too, hence, overwriting that file can help to thwart malware's use of it a tiny bit; and 5) there are numerous free lists of bad domain names available on the Internet which are updated regularly (see below).
+
+But modifying HOSTS files has some disadvantages too: 1) the larger the HOSTS file, the slower the overall name resolution performance; 2) the HOSTS file must be updated at least once per week, preferably once per day, in order to be really useful; 3) without Group Policy or a similar EMS product, managing the HOSTS files on thousands of computers can be difficult; 4) unlike DNS records which time-expire, an incorrect entry in a HOSTS file is permanent until that file is modified again; 5) if you don't trust your source(s) of bad domain lists, you may need to purchase access to a trustworthy commercial provider and/or somehow review FQDNs before they are blackholed with a HOSTS file; and 6) overwriting the HOSTS file destroys forensic evidence when malware also modifies that file.
+
+Note: This script optimizes name resolution performance by placing nine entries on each line in the file (most other tools do not, most only place one name per line in the HOSTS file).
+
+What to block?
+You can obtain lists of FQDNs and domain names to blackhole for free. Some lists are only for malware, others might be just for pornography, but be aware that they are never 100% complete or accurate (you get what you pay for, so don't be surprised to find gaps a small number of false positives).
+
+Some of the more popular blackhole lists include (in no particular order):
+
+www.MalwareDomains.com
+www.Malware.com.br
+www.MalwareDomainList.com
+www.MalwareURL.com
+www.SomeoneWhoCares.org
+mtc.sri.com
+www.MVPs.org
+www.UrlBlacklist.com (not free)
+From sites like the above you can download lists of FQDNs and simple domain names which can be fed into the PowerShell script for this article in order to update the HOSTS file.
+
+The script does not require the input file(s) to be HOSTS files or in any particular format. The script will try its best to extract all FQDNs and simple domain names from the input file(s), ignoring comments, whitespaces, IP addresses and other detritus, then reconstruct a new properly-formatted HOSTS file for you with whatever IP address you wish. You can specify multiple input files from multiple local, SMB or HTTP locations; these files will be merged together and duplicates removed.
+
+Requirements
+To use the PowerShell Update-HostsFile.ps1 script (download it here), you must:
+
+Have PowerShell 2.0 or later on the computer where the script will be run (XP-SP3 or later).
+Have NTFS write access to the HOSTS file, such as by being a member of the local Administrators group.
+To use Group Policy deployment, the target computers must be joined to an AD domain.
+Either local, SMB or HTTP access to the input file(s) with the unwanted names.
+Example Uses
+To see the script's command-line options (don't forget the ".\" before the script name):
+
+Update-HostsFile.ps1 /?
+get-help -full Update-HostsFile.ps1
+To add the names from www.MalwareDomainList.com to your HOSTS file and resolve them to "0.0.0.0":
+
+Update-HostsFile.ps1
+To blackhole all the names listed in file.txt, remotefile.txt, and all the names from the URL shown, then make them all resolve to "10.1.1.1":
+
+Update-HostsFile.ps1 -FilePathOrURL "c:\folder\file.txt \\server\share\remotefile.txt http://www.malwaredomainlist.com/hostslist/hosts.txt" -BlackHoleIP "10.1.1.1"
+Note: To input multiple files, separate each path with a space character (local drive, SMB or HTTP).
+
+The -AddDuplicateWWW switch will add the original input names to the HOSTS file, but will also add a second entry with "www." prepended for every name which does not already begin with "www." (many browsers will prepend "www." to any name which experiences a name resolution error):
+
+Update-HostsFile.ps1 -AddDuplicateWWW
+To erase the HOSTS file and add back only the standard localhost entries:
+
+Update-HostsFile.ps1 -ResetToDefaultHostsFile
+Frequently Asked Questions (FAQ)
+Q: Must the script be run with elevated privileges?
+A: Yes and no. The NTFS permissions on the HOSTS file do not allow regular users to modify it, so you must either run elevated or change the NTFS permissions on the HOSTS file to allow a non-administrative account to modify it, such as the account for a scheduled job.
+
+Q: How can I manage the HOSTS file on thousands of laptops?
+A: An EMS, Group Policy, Task Scheduler, SCHTASKS.EXE, etc.
+
+Q: Why not just do the blackholing at the DNS server?
+A: You can, and here is a script to do it, but roaming laptops often use DNS servers you don't control.
+
+Q: Isn't this an enormous pain-in-the-behind to manage?
+A: Yes, but so is cleaning up after malware infections (choose the lesser pain).
+
+Q: What about the name resolution performance penalty?
+A: The script places nine entries per line in the HOSTS file, which optimizes lookup performance, and if you also block ads this way, overall browser performance might actually improve. And if it turns out that lookup performance is too slow, reduce the number of entries you add to the HOSTS file, i.e., only blackhole what you really care about, such as the names used by rampant malware.
+
+Note: On my test system (Core i7 2.67GHz, 6GB RAM, 64-bit Windows 7) I have 4K lines in my HOSTS file with 36K names in it, the DNS Client service is running, and the average increase in name resolution time over a default HOSTS file is about 12 milliseconds.
+
+Intrusion Detection & Forensics
+By default, the script will resolve blackholed names to "0.0.0.0?, but there is a command-line parameter named "-BlackholeIP" with which you can set a different IP address for all your blackholed FQDNs. If you are mainly using HOSTS files to block malware-related names on internal systems (and not for blocking ads) you might consider using the IP address of an internal server set up specifically for this purpose.
+
+Your internal blackhole IDS server, let's call it, should listen on all the likely ports which malware or attack tools might use, especially TCP 80 (HTTP) and 21 (FTP). Enable maximum logging on it. Run a packet capture tool (like WinDump, WireShark or Network Monitor) to capture full packet payloads 24×7 using circular logging, with a large maximum capture size before wrapping, of all traffic to/from the blackhole server itself. You can install full servers for the listening ports, such as IIS for HTTP and FTP, but be careful of unintended infections. You might instead install honeypot services, or maybe something as simple as HoneyBOT, but we need to interact enough with the client so that the details of any requests can be logged. Your perimeter firewall should block and log all traffic for your blackhole server to/from the Internet too, hence, this is not intended for roaming laptops.
+
+The idea is that you can examine the various logs and packet captures on your blackhole server to help identify infected machines or those users who are attempting to violate your acceptable use policies. For example, when a workstation becomes infected, that malware may attempt to resolve a known FQDN in order to download via HTTP another piece of malware; often, you can identify the type of malware simply by the URL of the file it tried to download. You might also set a default HTML page which reminds users of your acceptable use policies (and have it mention that all Internet access is logged for the sake of HR). Don't forget that you can enable debug logging on the DNS server too.
+
+Caveats & Legal Disclaimers
+The script is free and in the public domain, you may use it for any purpose whatsoever without restriction. However, that being said?
+
+THIS SCRIPT IS PROVIDED "AS IS" WITH NO WARRANTIES OR GUARANTEES OF ANY KIND, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE. ALL RISKS OF DAMAGE REMAINS WITH THE USER, EVEN IF THE AUTHOR, SUPPLIER OR DISTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF ANY SUCH DAMAGE. IF YOUR STATE DOES NOT PERMIT THE COMPLETE LIMITATION OF LIABILITY, THEN DO NOT DOWNLOAD OR USE THE SCRIPT. NO TECHNICAL SUPPORT WILL BE PROVIDED.
+
+Please test the script on non-production systems first, then test on a production boxes only during off-peak hours and only after having made a full backup.
+
+The SANS Institute hopes you will find the script useful, so best wishes and good luck!
+
+[Version History]
+14.Sep.2010 : Initial release.
+14.Mar.2011: Bug fix (thanks to Seth Matheson and Tim Medin!)
+18.May.2021: Fixed download link.
+
+ALL CREDIT GOES TO SANS INSTITUTE THIS IS MERELY A REPUBLCATION IN THE PUBLIC DOMAIN
